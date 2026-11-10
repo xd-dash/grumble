@@ -1,0 +1,8 @@
+PACKAGES install
+
+systemd
+systemd-sysv
+ca-certificates
+iproute2
+iputils-ping
+linux-image-arm64

@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "source": {
+    "repository": "xd-dash/huram-abi-master",
+    "ref": "automation",
+    "commit": "cceeb88907686fe6aaaafe7c80362d374565eb2d",
+    "path": "experiments/grml-arm64"
+  },
+  "grml_live_revision": "6d729f059769e4d5be18f47bceb9d9f9d0bd5111",
+  "qualification": "unqualified"
+}
