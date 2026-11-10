@@ -13,7 +13,7 @@
           packageClass = "GRML_MINIMAL_${if system == "aarch64-linux" then "ARM64" else "AMD64"}";
           source = ./.;
           buildTools = with pkgs; [
-            bash coreutils git cacert util-linux shadow mmdebstrap dpkg
+            bash coreutils git cacert util-linux shadow dpkg
             squashfsTools xorriso python3 rsync socat jo mtools dosfstools
           ];
           wrap = name: script: tools: pkgs.writeShellApplication {
