@@ -1,56 +1,62 @@
-# Grml ARM64 QEMU baseline
+# Grumble
 
-Huram-owned experimental Grml live ISO for aarch64. No Podman, Wisp, or
-CoreOS-replacement claim. The upstream grml-live source is pinned to
-`6d729f059769e4d5be18f47bceb9d9f9d0bd5111`.
+Independent Grml live-image build and qualification tools for native Linux ARM64 and x86-64.
 
-## Scope
+**Status:** source migration completed; neither architecture has a qualified Grml ISO or verified guest boot.
 
-Upstream grml-live **automatically includes GRMLBASE** and the ARM64 class,
-in addition to our GRML_MINIMAL_ARM64 class. GRMLBASE contains significant
-rescue and firmware packages. This is a boot baseline, **not yet a minimal
-installed OS**. Measure first, then reduce deliberately.
+Source provenance is recorded in [provenance.json](provenance.json). The upstream `grml-live` checkout remains pinned to `6d729f059769e4d5be18f47bceb9d9f9d0bd5111`.
 
-## Native build
+## Ownership
 
-Use an ARM64 Linux builder with the full grml-live runtime dependencies,
-configured user namespaces and subordinate UID/GID mappings. Run as a
-non-root user. The builder invokes upstream `grml-live image-create` directly.
+- Grumble owns Grml configuration, source pins, build scripts and image qualification.
+- `xd-dash/nix.xd` owns native architecture selection, Nix-Alpine bootstrap and runtime orchestration.
+- One separate Nix-Alpine writer and volume belong to Grumble. Do **not** mount Agni/CoreOS's writable `/nix` here.
+- No Smoke or Huram credential is required for normal builds; Huram was used only to bootstrap this repository.
 
-```sh
-bash experiments/grml-arm64/build-image.sh "$PWD/grml-arm64-out"
-bash experiments/grml-arm64/qualify-image.sh "$PWD/grml-arm64-out"
-bash experiments/grml-arm64/measure-image.sh "$PWD/grml-arm64-out"
-```
+## Nix application interface
 
-Nix is optional and only wraps the native scripts:
+The same flake app names are exposed on `aarch64-linux` and `x86_64-linux`:
 
 ```sh
-nix run ./experiments/grml-arm64#build-image -- "$PWD/grml-arm64-out"
-nix run ./experiments/grml-arm64#inspect-image -- "$PWD/grml-arm64-out"
-nix run ./experiments/grml-arm64#measure-image -- "$PWD/grml-arm64-out"
+nix flake check
+nix run .#qualify
+nix run .#build -- /workspaces/grumble-out
+nix run .#inspect -- /workspaces/grumble-out
+nix run .#measure -- /workspaces/grumble-out
+nix run .#boot -- /workspaces/grumble-out /path/to/uefi-code.fd
 ```
 
-## QEMU boot
+`#qualify` is **preflight only**. It checks Linux architecture, native tools, non-root execution, subordinate ID configuration and functioning user namespaces. It must not be interpreted as ISO or boot qualification. `#build` invokes upstream `grml-live image-create`, `#inspect` checks optical boot metadata, and `#boot` starts a manual QEMU serial session.
 
-With an ARM64 UEFI firmware code file (e.g. AAVMF_CODE.fd):
+Grml automatically includes other classes such as GRMLBASE; this experiment is not yet a minimal installed OS.
+
+## Mac ARM64 Nix-Alpine
+
+From `~/workspace/nix.xd` on the isolated `codex/grumble-isolated-writer` branch:
 
 ```sh
-bash experiments/grml-arm64/boot-qemu.sh "$PWD/grml-arm64-out" /path/to/AAVMF_CODE.fd
+make bootstrap PROVIDER=container ARCH=arm64 SCOPE=nix-xd-grumble-arm \
+  IMAGE=localhost/nix-xd-grumble:arm64 NIX_XD_STORE_SIZE=40G
+make store-isolation-check PROVIDER=container ARCH=arm64 \
+  ISOLATION_PRIMARY=nix-xd-arm ISOLATION_SECONDARY=nix-xd-grumble-arm
+make sync PROVIDER=container ARCH=arm64 REPO=xd-dash/grumble \
+  WORKSPACES="$HOME/workspace" BRANCH=main
+make stage PROVIDER=container ARCH=arm64 SCOPE=nix-xd-grumble-arm \
+  WORKSPACES="$HOME/workspace" CHECKOUT=grumble
+make qualify PROVIDER=container ARCH=arm64 SCOPE=nix-xd-grumble-arm \
+  FLAKE=grumble
 ```
 
-The QEMU script is a manual smoke entrypoint; it does not assert successful
-UEFI boot, systemd readiness, network connectivity or console login.
-Those require captured runtime evidence. The live ISO is not a persistent
-installed disk. Record firmware identity and serial output when testing.
+Until the development branch is merged, select `BRANCH=codex/mac-nix-alpine-qualification` when syncing Grumble, or use an exact revision. The example `main` target describes the eventual stable interface.
 
-## Evidence required for qualification
+The native build is not yet proven on Alpine. In particular, the unprivileged `mmdebstrap`/user-namespace prerequisites may fail under Apple container. The preflight must fail closed, not silently upgrade container privileges or alter the existing Nix store.
 
-1. Full native grml-live log, exact upstream revision and ISO SHA256.
-2. QEMU serial log showing kernel, systemd and login.
-3. DHCP address and reachable network from the guest.
-4. ISO bytes, boot time, and guest `dpkg-query -W` package count.
-5. Repeatable boot and negative failure tests before reducing GRMLBASE.
+## Qualification still required
 
-Blacksmith 2-vCPU ARM64 pseudo-dispatch is static preflight only.
-No image build or VM boot has been verified.
+1. Independent writer mount identity and persistence.
+2. Native build prerequisites including unprivileged UID/GID mapping.
+3. ISO build with logs and SHA256.
+4. QEMU UEFI boot and serial evidence for kernel, systemd and login.
+5. Network/DHCP verification, image size and boot-time measurement.
+
+No Blacksmith build is authorized by these application scripts.
