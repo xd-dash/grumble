@@ -40,14 +40,14 @@ make bootstrap PROVIDER=container ARCH=arm64 SCOPE=nix-xd-grumble-arm \
 make store-isolation-check PROVIDER=container ARCH=arm64 \
   ISOLATION_PRIMARY=nix-xd-arm ISOLATION_SECONDARY=nix-xd-grumble-arm
 make sync PROVIDER=container ARCH=arm64 REPO=xd-dash/grumble \
-  WORKSPACES="$HOME/workspace" BRANCH=main
+  WORKSPACES="$HOME/workspace" BRANCH=codex/mac-nix-alpine-qualification
 make stage PROVIDER=container ARCH=arm64 SCOPE=nix-xd-grumble-arm \
   WORKSPACES="$HOME/workspace" CHECKOUT=grumble
 make qualify PROVIDER=container ARCH=arm64 SCOPE=nix-xd-grumble-arm \
   FLAKE=grumble
 ```
 
-Until the development branch is merged, select `BRANCH=codex/mac-nix-alpine-qualification` when syncing Grumble, or use an exact revision. The example `main` target describes the eventual stable interface.
+After merging the qualification branch, switch to `BRANCH=main` or select an exact tested commit for reproducible runs.
 
 The native build is not yet proven on Alpine. In particular, the unprivileged `mmdebstrap`/user-namespace prerequisites may fail under Apple container. The preflight must fail closed, not silently upgrade container privileges or alter the existing Nix store.
 
