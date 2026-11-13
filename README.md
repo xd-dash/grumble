@@ -32,24 +32,40 @@ Grml automatically includes other classes such as GRMLBASE; this experiment is n
 
 ## Mac ARM64 Nix-Alpine
 
-From `~/workspace/nix.xd` on the isolated `codex/grumble-isolated-writer` branch:
+Use the current dated nix.xd controller branch; Grumble does not require a
+Grumble-specific nix.xd branch or controller checkout. Isolation is provided by
+the Grumble writer scope and its own Nix volume, not by divergent controller
+source.
+
+From `~/workspace/nix.xd20261112` on `v20261112`:
 
 ```sh
+git switch v20261112
+git pull --ff-only
+
 make bootstrap PROVIDER=container ARCH=arm64 SCOPE=nix-xd-grumble-arm \
   IMAGE=localhost/nix-xd-grumble:arm64 NIX_XD_STORE_SIZE=40G
 make store-isolation-check PROVIDER=container ARCH=arm64 \
   ISOLATION_PRIMARY=nix-xd-arm ISOLATION_SECONDARY=nix-xd-grumble-arm
+
 make sync PROVIDER=container ARCH=arm64 REPO=xd-dash/grumble \
-  WORKSPACES="$HOME/workspace" BRANCH=codex/mac-nix-alpine-qualification
+  WORKSPACES="$HOME/workspace" BRANCH=codex/mac-nix-alpine-qualification \
+  REV=d7dbb46d1669a408307261330809d4b59a9bdc05 SYNC_NAME=grumble
 make stage PROVIDER=container ARCH=arm64 SCOPE=nix-xd-grumble-arm \
   WORKSPACES="$HOME/workspace" CHECKOUT=grumble
 make qualify PROVIDER=container ARCH=arm64 SCOPE=nix-xd-grumble-arm \
-  FLAKE=grumble
+  WORKSPACES="$HOME/workspace" FLAKE=grumble
 ```
 
-After merging the qualification branch, switch to `BRANCH=main` or select an exact tested commit for reproducible runs.
+Bootstrap and isolation checks are first-use or recovery operations. Routine
+qualification starts at `sync`, with an exact `REV`, then uses `stage` and
+`qualify`. All controller logs use `~/.local/nix.xd/logs`.
 
-The native build is not yet proven on Alpine. In particular, the unprivileged `mmdebstrap`/user-namespace prerequisites may fail under Apple container. The preflight must fail closed, not silently upgrade container privileges or alter the existing Nix store.
+After merging this Grumble branch, replace the branch and revision with the
+exact tested `main` commit. The native build is not yet proven on Alpine. In
+particular, unprivileged `mmdebstrap` and user-namespace prerequisites may
+fail under Apple container. The preflight must fail closed; it must not elevate
+the container or reuse Agni's writable store.
 
 ## Qualification still required
 
