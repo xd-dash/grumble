@@ -1,0 +1,41 @@
+name: Grumble static qualification
+on:
+  push:
+    branches: [main, codex/mac-nix-alpine-qualification]
+    paths:
+      - .github/workflows/static.yml
+      - flake.nix
+      - flake.lock
+      - '*.sh'
+      - config/**
+  pull_request:
+    paths:
+      - .github/workflows/static.yml
+      - flake.nix
+      - flake.lock
+      - '*.sh'
+      - config/**
+permissions:
+  contents: read
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Shell and package class contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          for script in ./*.sh; do bash -n "$script"; done
+          grep -qx linux-image-arm64 config/package_config/GRML_MINIMAL_ARM64
+          grep -qx linux-image-amd64 config/package_config/GRML_MINIMAL_AMD64
+          test "$(jq -r '.source.repository' provenance.json)" = xd-dash/huram-abi-master
+      - uses: cachix/install-nix-action@v31
+      - name: Evaluate locked flake for both Linux architectures
+        shell: bash
+        run: |
+          set -euo pipefail
+          nix --extra-experimental-features 'nix-command flakes' flake check --all-systems --no-build --show-trace

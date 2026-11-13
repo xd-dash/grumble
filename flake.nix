@@ -1,70 +1,65 @@
 {
-  description = "Huram ARM64 Grml guest image tooling";
+  description = "Grumble: reproducible Grml live-image tooling";
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   outputs = { self, nixpkgs }:
     let
-      system = "aarch64-linux";
-      pkgs = import nixpkgs { inherit system; };
-      source = ./.;
-      manifest = pkgs.writeText "grml-minimal-arm64-packages" ''
-        systemd
-        systemd-sysv
-        ca-certificates
-        iproute2
-        iputils-ping
-        linux-image-arm64
-      '';
-      measureImage = pkgs.writeShellApplication {
-        name = "grml-arm64-measure-image";
-        runtimeInputs = [ pkgs.bash pkgs.coreutils pkgs.findutils pkgs.xorriso pkgs.squashfsTools ];
-        text = ''
-          exec ${pkgs.bash}/bin/bash ${source}/measure-image.sh "$@"
-        '';
-      };
-      bootQemu = pkgs.writeShellApplication {
-        name = "grml-arm64-boot-qemu";
-        runtimeInputs = [ pkgs.bash pkgs.coreutils pkgs.findutils pkgs.qemu ];
-        text = ''
-          exec ${pkgs.bash}/bin/bash ${source}/boot-qemu.sh "$@"
-        '';
-      };
-      verify = pkgs.writeShellApplication {
-        name = "grml-arm64-verify";
-        runtimeInputs = [ pkgs.coreutils pkgs.gnugrep ];
-        text = ''
-          for pkg in systemd systemd-sysv linux-image-arm64; do
-            grep -qx "$pkg" ${manifest}
-          done
-          echo "PASS: minimal ARM64 package manifest; boot not qualified"
-        '';
-      };
-      buildImage = pkgs.writeShellApplication {
-        name = "grml-arm64-build-image";
-        runtimeInputs = [ pkgs.bash pkgs.coreutils pkgs.git pkgs.util-linux
-          pkgs.shadow pkgs.mmdebstrap pkgs.squashfsTools pkgs.xorriso ];
-        text = ''
-          exec ${pkgs.bash}/bin/bash ${source}/build-image.sh "$@"
-        '';
-      };
-      inspectImage = pkgs.writeShellApplication {
-        name = "grml-arm64-inspect-image";
-        runtimeInputs = [ pkgs.bash pkgs.coreutils pkgs.findutils pkgs.xorriso ];
-        text = ''
-          exec ${pkgs.bash}/bin/bash ${source}/qualify-image.sh "$@"
-        '';
-      };
+      systems = [ "aarch64-linux" "x86_64-linux" ];
+      eachSystem = nixpkgs.lib.genAttrs systems;
     in {
-      packages.${system} = {
-        inherit manifest verify buildImage inspectImage bootQemu measureImage;
-        default = verify;
-      };
-      apps.${system} = {
-        qualify = { type = "app"; program = "${verify}/bin/grml-arm64-verify"; };
-        build-image = { type = "app"; program = "${buildImage}/bin/grml-arm64-build-image"; };
-        inspect-image = { type = "app"; program = "${inspectImage}/bin/grml-arm64-inspect-image"; };
-        boot-qemu = { type = "app"; program = "${bootQemu}/bin/grml-arm64-boot-qemu"; };
-        measure-image = { type = "app"; program = "${measureImage}/bin/grml-arm64-measure-image"; };
-      };
-      checks.${system}.manifest = verify;
+      packages = eachSystem (system:
+        let
+          pkgs = import nixpkgs { inherit system; };
+          arch = if system == "aarch64-linux" then "arm64" else "amd64";
+          packageClass = "GRML_MINIMAL_${if system == "aarch64-linux" then "ARM64" else "AMD64"}";
+          source = ./.;
+          buildTools = with pkgs; [
+            bash coreutils git cacert util-linux shadow dpkg
+            squashfsTools xorriso python3 rsync socat jo mtools dosfstools
+          ];
+          wrap = name: script: tools: pkgs.writeShellApplication {
+            inherit name;
+            runtimeInputs = tools;
+            text = ''
+              export GRUMBLE_SYSTEM=${system}
+              exec ${pkgs.bash}/bin/bash ${source}/${script} "$@"
+            '';
+          };
+          qualify = wrap "grumble-qualify" "preflight.sh" buildTools;
+          build = wrap "grumble-build" "build-image.sh" buildTools;
+          inspect = wrap "grumble-inspect" "qualify-image.sh"
+            (with pkgs; [ bash coreutils findutils xorriso qemu ]);
+          boot = wrap "grumble-boot" "boot-qemu.sh"
+            (with pkgs; [ bash coreutils findutils qemu ]);
+          measure = wrap "grumble-measure" "measure-image.sh"
+            (with pkgs; [ bash coreutils findutils gnugrep xorriso squashfsTools ]);
+          static = pkgs.runCommand "grumble-${arch}-static" {
+            nativeBuildInputs = with pkgs; [ bash gnugrep ];
+          } ''
+            for script in preflight.sh build-image.sh qualify-image.sh boot-qemu.sh measure-image.sh; do
+              bash -n ${source}/"$script"
+            done
+            grep -qx linux-image-${arch} ${source}/config/package_config/${packageClass}
+            mkdir -p "$out"
+            echo 'GRUMBLE_STATIC_RESULT=passed' > "$out/result"
+          '';
+        in {
+          inherit qualify build inspect boot measure static;
+          default = qualify;
+        });
+      apps = eachSystem (system:
+        let
+          p = self.packages.${system};
+          mkApp = pkg: name: { type = "app"; program = "${pkg}/bin/${name}"; };
+        in {
+          default = mkApp p.qualify "grumble-qualify";
+          qualify = mkApp p.qualify "grumble-qualify";
+          build = mkApp p.build "grumble-build";
+          inspect = mkApp p.inspect "grumble-inspect";
+          boot = mkApp p.boot "grumble-boot";
+          measure = mkApp p.measure "grumble-measure";
+        });
+      checks = eachSystem (system: {
+        static = self.packages.${system}.static;
+      });
     };
 }
